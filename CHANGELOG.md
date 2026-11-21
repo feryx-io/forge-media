@@ -55,7 +55,7 @@ minor bump marks new public API.
   `fdk-aac-sys` builds from source. It gives raw access units of 1024
   samples, with afterburner on, and their `AudioSpecificConfig`.
   `aac::audio_specific_config` gives the same configuration without an
-  encoder.
+  encoder. Without the feature the module builds with no warning.
   - **Licensing:** the FDK licence permits redistribution but grants no
     patent rights. AAC's patent licensing is the deployer's matter, as
     H.264's is with OpenH264 built from source.

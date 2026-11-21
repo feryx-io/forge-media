@@ -10,8 +10,6 @@
 //! licensing is the deployer's matter, as H.264's is with OpenH264 built
 //! from source. Nothing here is compiled unless the `aac` feature asks.
 
-use crate::{CodecError, Result};
-
 /// Samples per channel each access unit codes.
 pub const AAC_FRAME: usize = 1024;
 
@@ -63,6 +61,7 @@ pub use imp::AacEncoder;
 #[cfg(feature = "aac")]
 mod imp {
     use super::*;
+    use crate::{CodecError, Result};
     use fdk_aac_sys as sys;
     use std::os::raw::{c_int, c_void};
 
