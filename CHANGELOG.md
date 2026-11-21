@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-11-21.1] — workspace release
+
+**Crate versions:** forge-codecs **0.3.0** (was 0.2.0) and forge-rtmp
+**0.1.0** (new); every other crate is as tagged v2026.11.21. bcg729-sys
+0.1.0, forge-ai-stream 0.2.0, forge-api 0.6.0, forge-bfcp 0.1.1, forge-bwe
+0.1.1, forge-codecs 0.3.0, forge-conference 0.23.0, forge-core 0.2.2,
+forge-dtmf 0.2.1, forge-engine 0.8.1, forge-ha 0.3.0, forge-hep 0.0.1,
+forge-ice 0.3.0, forge-injection 0.2.0, forge-kernel 0.2.0,
+forge-kernel-ebpf 0.2.0, forge-mixer 0.6.0, forge-mp4 0.2.0, forge-recorder
+0.2.1, forge-resampler 0.2.0, forge-rtmp 0.1.0, forge-rtp 0.8.1, forge-sdp
+0.2.3, forge-siprec 0.2.2, forge-storage 0.2.0, forge-transcoder 0.2.0,
+forge-transcription 0.2.0, forge-vad 0.2.0, forge-video 0.6.1,
+forge-video-codecs 0.1.4, forge-video-hw 0.3.0, forge-webm 0.1.0,
+forge-webrtc 0.11.0. Embeds siphon-rs **v2026.11.21** (unchanged).
+
+**Breaking changes:** none. forge-codecs' new `aac` module is additive; its
+minor bump marks new public API.
+
 ### Added
 
 - **forge-rtmp 0.1.0** (new crate): FLV and RTMP for pushing a stream to a
