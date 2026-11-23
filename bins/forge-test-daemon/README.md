@@ -258,7 +258,7 @@ Forge will automatically:
 
 To build a full SIP integration:
 
-1. **Add SIP Stack**: Use siphon-rs (already added as submodule)
+1. **Add SIP Stack**: Use siphon-rs (the `siphon-*` crates on crates.io)
 2. **Handle INVITE**: Create Forge sessions on incoming calls
 3. **SDP Integration**: Extract/insert RTP ports in SDP offer/answer
 4. **Call State**: Map SIP dialog state to Forge session lifecycle

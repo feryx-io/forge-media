@@ -42,8 +42,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - name: Free runner disk space
         # `--all-features` includes `neural-vad` (tract-onnx + friends), and a
@@ -83,9 +81,9 @@ jobs:
           shared-key: test
 
       - name: Run tests
-        # `--workspace` with a path-dep submodule compiles the siphon-rs
-        # submodule's own test targets, which aren't governed here. Enumerate
-        # workspace-owned packages and test each.
+        # Enumerate workspace-owned packages and test each. The `external/`
+        # filter dates from the siphon-rs submodule (removed; siphon-rs now
+        # comes from crates.io) and keeps any future vendored tree out.
         run: |
           set -eo pipefail
           members=$(cargo metadata --no-deps --format-version=1 \
@@ -119,8 +117,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - name: Free runner disk space
         # `--all-features` includes `neural-vad` (tract-onnx + friends), and a
@@ -162,8 +158,8 @@ jobs:
           shared-key: check
 
       - name: Check formatting
-        # `cargo fmt --all` follows path dependencies into `external/siphon-rs`,
-        # which is governed separately, so iterate our own members instead.
+        # `cargo fmt --all` follows path dependencies, so iterate our own
+        # members instead. (Written for the since-removed siphon-rs submodule.)
         run: |
           set -eo pipefail
           members=$(cargo metadata --no-deps --format-version=1 \
@@ -188,9 +184,8 @@ jobs:
           cargo check --all-features --workspace
 
       - name: Run clippy
-        # `cargo clippy --workspace` lints path dependencies, which here means
-        # descending into `external/siphon-rs`. Iterate our own packages and
-        # pass `--no-deps` so each is linted in isolation.
+        # `cargo clippy --workspace` lints path dependencies. Iterate our own
+        # packages and pass `--no-deps` so each is linted in isolation.
         #
         # The `-A` allow list covers pre-existing stylistic warnings across the
         # workspace that would need broad mechanical rewrites to resolve. The
@@ -278,11 +273,9 @@ jobs:
         # step was always trying to express, and rustdoc reports it against
         # the offending line instead of us re-deriving it from stderr.
         #
-        # And `--workspace` documents the `external/siphon-rs` submodule,
-        # which is governed separately — with the lint actually enforcing,
-        # its doc warnings would fail our CI for something we do not own.
         # Enumerate workspace-owned packages, the same pattern the
-        # fmt/clippy/test jobs already use.
+        # fmt/clippy/test jobs already use, so that a vendored tree's doc
+        # warnings could not fail our CI for something we do not own.
         run: |
           set -eo pipefail
           members=$(cargo metadata --no-deps --format-version=1 \
@@ -300,8 +293,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -327,8 +318,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - name: Free runner disk space
         # `--all-features` includes `neural-vad` (tract-onnx + friends), and a
@@ -389,8 +378,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - name: Free runner disk space
         # `--all-features` includes `neural-vad` (tract-onnx + friends), and a
@@ -444,8 +431,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - name: Free runner disk space
         # `--all-features` includes `neural-vad` (tract-onnx + friends), and a
@@ -492,8 +477,7 @@ jobs:
           shared-key: coverage
 
       - name: Generate coverage
-        # Scoped to workspace-owned packages; the siphon-rs submodule has its
-        # own test infrastructure and is not covered by this repo's run.
+        # Scoped to workspace-owned packages.
         # The llvm engine instruments the build instead of single-stepping
         # the tests under ptrace, which segfaulted in forge-webrtc's socket
         # and DTLS tests (local_port.rs) while they pass in the test jobs.

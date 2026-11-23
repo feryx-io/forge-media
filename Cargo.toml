@@ -95,9 +95,6 @@ aes-gcm = "0.11"
 hmac = "0.13"
 sha1 = "0.11"
 sha2 = "0.11"
-# NOTE: the siphon-rs submodule crates inherit this rand via
-# `workspace = true` (they're path deps inside this workspace dir), so
-# this version and the submodule's rand API usage must move in lockstep.
 rand = "0.10"
 subtle = "2.5"
 

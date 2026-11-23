@@ -34,24 +34,31 @@ server's version, not a workspace aggregate.)
   day's first release.
 - Tags are **immutable**. Never move or delete a pushed tag; if a tagged
   release is bad, cut a new one.
-- The tag message lists every crate's version in the release and the embedded
-  siphon-rs tag (see `git tag -n99 v2026.08.24` for the template).
+- The tag message lists every crate's version in the release (see
+  `git tag -n99 v2026.08.24` for the template; the "embeds siphon-rs" line in
+  older tags dates from the submodule and is no longer written).
 
-## The siphon-rs submodule rule
+## siphon-rs and hep-rs come from crates.io
 
-forge-media embeds siphon-rs as the `external/siphon-rs` submodule, and the
-two repos are commonly consumed together (siphon-ai pins both). Therefore:
+Until `v2026.11.21.1` forge-media embedded siphon-rs as the
+`external/siphon-rs` submodule and pinned `sip-sdp` and `hep-rs` by git.
+Both projects are now published, and forge-media takes them from crates.io:
 
-- **A release's submodule must point at a *tagged* siphon-rs commit**, never
-  an untagged rev. If the submodule is mid-stream at release time, first bump
-  it to the nearest siphon-rs tag (or cut a siphon-rs release).
-- The changelog section and the tag message both **record the embedded
-  siphon-rs tag** — "forge-media v2026.08.24 embeds siphon-rs v2026.08.24" is
-  a checkable statement, not two SHAs correlated by hand.
-- Downstream consumers pinning both repos should pin the pair a forge-media
-  release names, so the siphon-rs revision on their SIP path and the one
-  inside forge's media path cannot silently diverge (the class of bug behind
-  siphon-ai #405/#406).
+- siphon-rs's crates were renamed `sip-*` → `siphon-*` when they were
+  published. The manifests keep the old dependency names with
+  `sip-sdp = { package = "siphon-sdp", version = "…" }`, so the code still
+  says `sip_sdp`.
+- A fix forge-media needs from siphon-rs or hep-rs has to be **published**
+  there before a forge-media release can depend on it. Never release with a
+  git or path override of either.
+- The changelog section records a siphon-rs or hep-rs requirement only when
+  a release changes it.
+- A consumer that also depends on siphon-rs directly (siphon-ai does) must
+  take it from crates.io too. Cargo then resolves one copy of each crate for
+  the SIP path and forge's media path, which is what the old "pin the pair"
+  rule existed to guarantee (the class of bug behind siphon-ai #405/#406). A
+  git pin of siphon-rs beside these crates.io dependencies would bring that
+  divergence back as two copies with incompatible types.
 
 ## Crate version bump conventions
 
@@ -100,7 +107,7 @@ forge-rtp). The strict audit discipline applies from the release after it.
 `## [YYYY-MM-DD] — workspace release`, which must include:
 
 1. The full list of crate versions in the release (including "unchanged"
-   crates) and the embedded siphon-rs tag.
+   crates).
 2. A **Breaking changes** paragraph naming each breaking API change and its
    PR/issue number.
 3. The accumulated entries.
@@ -114,8 +121,8 @@ per-crate format.)
 1. **Audit**: for each crate, determine what landed since its last bump and
    classify per the table above.
 2. **Bump** the `version =` lines in the affected `Cargo.toml`s.
-3. **Submodule**: confirm `external/siphon-rs` points at a tagged siphon-rs
-   commit; bump it first if not.
+3. **Dependencies**: confirm no manifest carries a git or path override of
+   siphon-rs or hep-rs.
 4. **Changelog**: backfill any commits missing from `[Unreleased]`, then
    convert it into the dated release section.
 5. **Verify**: workspace build and tests pass; clippy is clean on the pinned
@@ -126,8 +133,6 @@ per-crate format.)
    ```bash
    git tag -a vYYYY.MM.DD -m "workspace release YYYY-MM-DD
 
-   embeds siphon-rs <tag>
-
    <crate version list>" <merge-sha>
    git push origin vYYYY.MM.DD
    ```
@@ -135,8 +140,7 @@ per-crate format.)
    Anything merged to `main` after the changelog PR but before tagging either
    gets a changelog entry first, or an explicit callout in the release notes.
 8. **GitHub Release**: `gh release create vYYYY.MM.DD` with the crate version
-   table, the breaking-changes summary, the embedded siphon-rs tag, and the
-   downstream pinning snippet. There is no release automation on tags — the
+   table, the breaking-changes summary, and the downstream pinning snippet. There is no release automation on tags — the
    old `release.yml` (which cross-compiled standalone-server binaries and
    never ran) was removed when these rules were adopted; if server binaries
    are ever wanted as release artifacts, that's a new decision, not a revert.
@@ -159,8 +163,8 @@ forge-engine = { git = "https://github.com/feryx-io/forge-media", tag = "v2026.0
   single-sourced.
 - Upgrading = bump the tag, `cargo update`, then work through that release's
   breaking-changes paragraph in the changelog.
-- When a consumer also pins siphon-rs directly (siphon-ai does), prefer the
-  siphon-rs tag the forge-media release embeds.
+- When a consumer also depends on siphon-rs directly (siphon-ai does), it
+  takes siphon-rs from crates.io, as forge-media does (see above).
 - For a consumer that needs a fix without absorbing newer breakage: branch
   from its pinned tag, cherry-pick, and tag the result with the same-day
   counter rule.

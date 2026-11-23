@@ -7,12 +7,14 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-# Siphon SIP stack
-sip-core = { path = "../../external/siphon-rs/crates/sip-core" }
-sip-parse = { path = "../../external/siphon-rs/crates/sip-parse" }
-sip-transport = { path = "../../external/siphon-rs/crates/sip-transport" }
-sip-uas = { path = "../../external/siphon-rs/crates/sip-uas" }
-sip-sdp = { path = "../../external/siphon-rs/crates/sip-sdp" }
+# Siphon SIP stack, from crates.io. The crates were renamed `sip-*` ->
+# `siphon-*` when they were published; `package` keeps the `sip_*` names the
+# code uses.
+sip-core = { package = "siphon-core", version = "0.7.8" }
+sip-parse = { package = "siphon-parse", version = "0.4.0" }
+sip-transport = { package = "siphon-transport", version = "0.7.2" }
+sip-uas = { package = "siphon-uas", version = "0.5.2" }
+sip-sdp = { package = "siphon-sdp", version = "0.3.2" }
 
 # Forge test daemon (for ForgeClient)
 forge-test-daemon = { path = "../forge-test-daemon" }
