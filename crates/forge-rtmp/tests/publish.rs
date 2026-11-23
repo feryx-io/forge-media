@@ -173,7 +173,7 @@ async fn rtmps_publishes_over_tls() {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let cert = rcgen::generate_simple_self_signed(vec!["127.0.0.1".into()]).unwrap();
     let der = cert.cert.der().clone();
-    let key = rustls::pki_types::PrivateKeyDer::Pkcs8(cert.key_pair.serialize_der().into());
+    let key = rustls::pki_types::PrivateKeyDer::Pkcs8(cert.signing_key.serialize_der().into());
     let server_config = rustls::ServerConfig::builder_with_provider(Arc::clone(&provider))
         .with_safe_default_protocol_versions()
         .unwrap()
