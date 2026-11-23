@@ -1740,7 +1740,7 @@ dependencies = [
 
 [[package]]
 name = "forge-hep"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "bytes",
  "hep-rs",
@@ -1916,7 +1916,7 @@ dependencies = [
 
 [[package]]
 name = "forge-sdp"
-version = "0.2.3"
+version = "0.3.0"
 dependencies = [
  "base64 0.23.1",
  "chrono",

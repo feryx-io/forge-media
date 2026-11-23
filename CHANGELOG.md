@@ -7,11 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2026-11-22] — workspace release
+
+**Crate versions:** forge-sdp **0.3.0** (was 0.2.3) and forge-hep **0.1.0**
+(was 0.0.1); every other crate is as tagged v2026.11.21.1. bcg729-sys
+0.1.0, forge-ai-stream 0.2.0, forge-api 0.6.0, forge-bfcp 0.1.1, forge-bwe
+0.1.1, forge-codecs 0.3.0, forge-conference 0.23.0, forge-core 0.2.2,
+forge-dtmf 0.2.1, forge-engine 0.8.1, forge-ha 0.3.0, forge-hep 0.1.0,
+forge-ice 0.3.0, forge-injection 0.2.0, forge-kernel 0.2.0,
+forge-kernel-ebpf 0.2.0, forge-mixer 0.6.0, forge-mp4 0.2.0, forge-recorder
+0.2.1, forge-resampler 0.2.0, forge-rtmp 0.1.0, forge-rtp 0.8.1, forge-sdp
+0.3.0, forge-siprec 0.2.2, forge-storage 0.2.0, forge-transcoder 0.2.0,
+forge-transcription 0.2.0, forge-vad 0.2.0, forge-video 0.6.1,
+forge-video-codecs 0.1.4, forge-video-hw 0.3.0, forge-webm 0.1.0,
+forge-webrtc 0.11.0. siphon-rs is no longer embedded: `siphon-sdp` 0.3.2 and
+`hep-rs` 0.1 come from crates.io.
+
+**Breaking changes:** forge-sdp 0.3.0 and forge-hep 0.1.0 (#241). Neither
+changes its own API, but the `sip_sdp` types forge-sdp re-exports and the
+`hep_rs` types forge-hep re-exports now come from the crates.io packages
+`siphon-sdp` and `hep-rs` rather than from git. A consumer that names those
+types must take both from crates.io in the same change; see the entry below.
+
 ### Changed
 
 - **siphon-rs and hep-rs are taken from crates.io, and the `external/siphon-rs`
-  submodule is gone.** `forge-sdp` requires `siphon-sdp` 0.3.2 (was the
-  `sip-sdp` git tag `v2026.11.21`), `forge-hep` requires `hep-rs` 0.1 (was
+  submodule is gone** (#241). `forge-sdp` 0.3.0 requires `siphon-sdp` 0.3.2 (was the
+  `sip-sdp` git tag `v2026.11.21`), `forge-hep` 0.1.0 requires `hep-rs` 0.1 (was
   git `main`), and `forge-sip-server` takes `siphon-core`, `siphon-parse`,
   `siphon-transport`, `siphon-uas` and `siphon-sdp` from the registry instead
   of from the submodule. siphon-rs renamed its crates `sip-*` → `siphon-*`
@@ -27,6 +49,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   builds two copies and the types do not match.
 - A clone no longer needs `--recurse-submodules`, and CI no longer checks
   submodules out.
+
+### Security
+
+- `url` 2.5.9 for RUSTSEC-2026-0592 (#239) and `rustix` 1.1.6 for
+  RUSTSEC-2026-0486 (#240). Lockfile only.
+
+### Dependencies
+
+- `axum-server` 0.9 in forge-api, which exposes none of its types, and
+  `rcgen` 0.14 in forge-rtmp's tests (#236, #237). `ffmpeg-sys-next` 9.1.1
+  (#238) and the patch-update group (#235) are lockfile only. No crate is
+  bumped for these.
 
 ## [2026-11-21.1] — workspace release
 
