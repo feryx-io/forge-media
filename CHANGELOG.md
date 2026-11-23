@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **siphon-rs and hep-rs are taken from crates.io, and the `external/siphon-rs`
+  submodule is gone.** `forge-sdp` requires `siphon-sdp` 0.3.2 (was the
+  `sip-sdp` git tag `v2026.11.21`), `forge-hep` requires `hep-rs` 0.1 (was
+  git `main`), and `forge-sip-server` takes `siphon-core`, `siphon-parse`,
+  `siphon-transport`, `siphon-uas` and `siphon-sdp` from the registry instead
+  of from the submodule. siphon-rs renamed its crates `sip-*` → `siphon-*`
+  when it published them; the manifests alias them back
+  (`sip-sdp = { package = "siphon-sdp", … }`), so no source changes. The code
+  is the same as the embedded `v2026.11.21` apart from `siphon-transport`
+  0.7.2 (no span guard held across an await), which only `forge-sip-server`
+  links.
+  **Breaking for consumers:** the `sip_sdp` types in `forge-sdp`'s API and
+  the `hep_rs` types in `forge-hep`'s now come from the crates.io packages. A
+  consumer that names those types must take `siphon-sdp` and `hep-rs` from
+  crates.io as well; with a git pin of either beside this release Cargo
+  builds two copies and the types do not match.
+- A clone no longer needs `--recurse-submodules`, and CI no longer checks
+  submodules out.
+
 ## [2026-11-21.1] — workspace release
 
 **Crate versions:** forge-codecs **0.3.0** (was 0.2.0) and forge-rtmp
