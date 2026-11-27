@@ -823,6 +823,8 @@ pub struct VideoRoom {
     /// Per-source decoded-frame counts at the last fps sample.
     fps_samples: Mutex<(Instant, HashMap<SourceKey, u64>)>,
     stopped: AtomicBool,
+    /// What the room's clock logs under (see [`VideoRoom::set_log_span`]).
+    log_span: parking_lot::Mutex<Option<tracing::Span>>,
 }
 
 /// The least a composite asks a peer's person to be sent at, before their
@@ -875,6 +877,9 @@ impl VideoRoom {
             overruns: AtomicU64::new(0),
             fps_samples: Mutex::new((Instant::now(), HashMap::new())),
             stopped: AtomicBool::new(false),
+            // The audio room's, when its host named one: video logs as the
+            // room it belongs to.
+            log_span: parking_lot::Mutex::new(audio.host_log_span()),
         });
         // Adopt in join order so the grid is stable from the first tick.
         let mut existing: Vec<_> = audio
@@ -890,6 +895,19 @@ impl VideoRoom {
         gauge!("forge_conference_video_rooms").increment(1.0);
         info!(room = %id, fps, "video room started");
         room
+    }
+
+    /// The span the room's clock, and the composing and forwarding it
+    /// drives, log under; unset, a `video_room` span naming its id.
+    pub fn set_log_span(&self, span: tracing::Span) {
+        *self.log_span.lock() = Some(span);
+    }
+
+    fn log_span(&self) -> tracing::Span {
+        self.log_span
+            .lock()
+            .clone()
+            .unwrap_or_else(|| tracing::info_span!("video_room", room = %self.id))
     }
 
     pub fn id(&self) -> &str {
@@ -2737,57 +2755,60 @@ impl VideoRoom {
         *self.runtime.lock() = tokio::runtime::Handle::try_current().ok();
         let weak = Arc::downgrade(self);
         let fps = self.fps();
-        let task = tokio::spawn(async move {
-            let mut clock = VideoClock::new(fps);
-            loop {
-                let n = clock.tick().await;
-                let Some(room) = weak.upgrade() else { break };
-                if room.stopped.load(Ordering::Acquire) {
-                    break;
-                }
-                let wanted = room.target_fps.load(Ordering::Relaxed);
-                if wanted != clock.target_fps() {
-                    clock.set_target_fps(wanted);
-                    room.fps.store(clock.fps(), Ordering::Relaxed);
-                }
-                // One compose job in flight per room: the clock waits for
-                // it, so its overrun accounting sees the real cost.
-                let (tx, rx) = tokio::sync::oneshot::channel();
-                let job_room = Weak::clone(&weak);
-                let submitted = room.backend.pool.submit(move || {
-                    if let Some(r) = job_room.upgrade() {
-                        r.compose_tick(n);
+        let task = tokio::spawn(tracing::Instrument::instrument(
+            async move {
+                let mut clock = VideoClock::new(fps);
+                loop {
+                    let n = clock.tick().await;
+                    let Some(room) = weak.upgrade() else { break };
+                    if room.stopped.load(Ordering::Acquire) {
+                        break;
                     }
-                    let _ = tx.send(());
-                });
-                if !submitted {
-                    warn!(room = %room.id, "codec pool is gone; video clock stopping");
-                    break;
-                }
-                let _ = rx.await;
-                // The clock asks this before it halves the rate, and again
-                // when a calm stretch means something can be given back.
-                let mut shedder = RoomShedder { room: &room };
-                if let Some(ev) = clock.done_with(&mut shedder) {
-                    let (from, to, overload) = match ev {
-                        ClockEvent::FpsHalved { from, to } => (from, to, true),
-                        ClockEvent::FpsRestored { from, to } => (from, to, false),
-                    };
-                    room.fps.store(to, Ordering::Relaxed);
-                    if overload {
-                        warn!(room = %room.id, from, to, "video compositor overran; frame rate halved");
-                    } else {
-                        info!(room = %room.id, from, to, "video frame rate restored");
+                    let wanted = room.target_fps.load(Ordering::Relaxed);
+                    if wanted != clock.target_fps() {
+                        clock.set_target_fps(wanted);
+                        room.fps.store(clock.fps(), Ordering::Relaxed);
                     }
-                    let _ = room
-                        .events
-                        .send(VideoRoomEvent::FpsChanged { from, to, overload });
+                    // One compose job in flight per room: the clock waits for
+                    // it, so its overrun accounting sees the real cost.
+                    let (tx, rx) = tokio::sync::oneshot::channel();
+                    let job_room = Weak::clone(&weak);
+                    let submitted = room.backend.pool.submit(move || {
+                        if let Some(r) = job_room.upgrade() {
+                            r.compose_tick(n);
+                        }
+                        let _ = tx.send(());
+                    });
+                    if !submitted {
+                        warn!(room = %room.id, "codec pool is gone; video clock stopping");
+                        break;
+                    }
+                    let _ = rx.await;
+                    // The clock asks this before it halves the rate, and again
+                    // when a calm stretch means something can be given back.
+                    let mut shedder = RoomShedder { room: &room };
+                    if let Some(ev) = clock.done_with(&mut shedder) {
+                        let (from, to, overload) = match ev {
+                            ClockEvent::FpsHalved { from, to } => (from, to, true),
+                            ClockEvent::FpsRestored { from, to } => (from, to, false),
+                        };
+                        room.fps.store(to, Ordering::Relaxed);
+                        if overload {
+                            warn!(room = %room.id, from, to, "video compositor overran; frame rate halved");
+                        } else {
+                            info!(room = %room.id, from, to, "video frame rate restored");
+                        }
+                        let _ = room
+                            .events
+                            .send(VideoRoomEvent::FpsChanged { from, to, overload });
+                    }
+                    room.overruns.store(clock.overruns(), Ordering::Relaxed);
+                    gauge!("forge_conference_video_fps", "room_id" => room.id.clone())
+                        .set(clock.fps() as f64);
                 }
-                room.overruns.store(clock.overruns(), Ordering::Relaxed);
-                gauge!("forge_conference_video_fps", "room_id" => room.id.clone())
-                    .set(clock.fps() as f64);
-            }
-        });
+            },
+            self.log_span(),
+        ));
         *self.clock_task.lock() = Some(task);
     }
 
