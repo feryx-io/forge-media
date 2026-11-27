@@ -99,6 +99,8 @@ pub struct ConferenceRoom {
     frame_clock_task: parking_lot::Mutex<Option<JoinHandle<()>>>,
     /// Frame sequence broadcast to consumers waiting on the clock
     frame_tx: tokio::sync::watch::Sender<u64>,
+    /// What the room's own tasks log under (see [`ConferenceRoom::set_log_span`]).
+    log_span: parking_lot::Mutex<Option<tracing::Span>>,
     /// The video room, when the meeting has video enabled
     video: RwLock<Option<Arc<VideoRoom>>>,
     /// The listeners' feeds (see [`ConferenceRoom::listen_audience`]).
@@ -149,6 +151,7 @@ impl ConferenceRoom {
             frame_size,
             frame_clock_task: parking_lot::Mutex::new(None),
             frame_tx: tokio::sync::watch::channel(0).0,
+            log_span: parking_lot::Mutex::new(None),
             video: RwLock::new(None),
             audience: crate::audience::AudienceMix::new(id_for_audience),
         })
@@ -334,6 +337,24 @@ impl ConferenceRoom {
     }
 
     /// Get the room ID
+    /// The span the room's own tasks (the frame clock, the mixing it
+    /// drives, DTMF handling) log under, so a host can name what the room
+    /// belongs to on every line. Set it before the room starts; unset, the
+    /// room's tasks log under a `room` span naming its id.
+    pub fn set_log_span(&self, span: tracing::Span) {
+        *self.log_span.lock() = Some(span);
+    }
+
+    fn log_span(&self) -> tracing::Span {
+        self.host_log_span()
+            .unwrap_or_else(|| tracing::info_span!("room", room = %self.id))
+    }
+
+    /// The span the host set, if it set one; the room's video takes it.
+    pub(crate) fn host_log_span(&self) -> Option<tracing::Span> {
+        self.log_span.lock().clone()
+    }
+
     pub fn id(&self) -> &str {
         &self.id
     }
@@ -1107,18 +1128,22 @@ impl ConferenceRoom {
             "Starting frame clock for room {} ({:?} per frame)",
             room_id, period
         );
-        *task = Some(tokio::spawn(async move {
-            let mut interval = tokio::time::interval(period);
-            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-            loop {
-                interval.tick().await;
-                let Some(room) = weak.upgrade() else {
-                    break;
-                };
-                room.advance_frame();
-            }
-            debug!("Frame clock for room {} stopped", room_id);
-        }));
+        *task = Some(tokio::spawn(tracing::Instrument::instrument(
+            async move {
+                debug!("Frame clock for room {} running", room_id);
+                let mut interval = tokio::time::interval(period);
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                loop {
+                    interval.tick().await;
+                    let Some(room) = weak.upgrade() else {
+                        break;
+                    };
+                    room.advance_frame();
+                }
+                debug!("Frame clock for room {} stopped", room_id);
+            },
+            self.log_span(),
+        )));
         Ok(())
     }
 
@@ -1535,50 +1560,53 @@ impl ConferenceRoom {
         let room = Arc::clone(self);
         let room_id = self.id.clone();
 
-        tokio::spawn(async move {
-            let mut rx = event_bus.subscribe();
-            debug!("DTMF processing task started for room {}", room_id);
+        tokio::spawn(tracing::Instrument::instrument(
+            async move {
+                let mut rx = event_bus.subscribe();
+                debug!("DTMF processing task started for room {}", room_id);
 
-            loop {
-                match rx.recv().await {
-                    Ok(event) => {
-                        // Filter for DTMF events
-                        if let ForgeEvent::DtmfDigitDetected {
-                            call_id,
-                            digit,
-                            event_type,
-                            ..
-                        } = event
-                        {
-                            // Only process End events to avoid duplicates
-                            if event_type != DtmfEventKind::End {
-                                continue;
-                            }
+                loop {
+                    match rx.recv().await {
+                        Ok(event) => {
+                            // Filter for DTMF events
+                            if let ForgeEvent::DtmfDigitDetected {
+                                call_id,
+                                digit,
+                                event_type,
+                                ..
+                            } = event
+                            {
+                                // Only process End events to avoid duplicates
+                                if event_type != DtmfEventKind::End {
+                                    continue;
+                                }
 
-                            // Check if this call_id belongs to our room
-                            if let Some(entry) = room.call_id_map.get(&call_id) {
-                                let participant_id = entry.value().clone();
-                                drop(entry); // Release the reference
+                                // Check if this call_id belongs to our room
+                                if let Some(entry) = room.call_id_map.get(&call_id) {
+                                    let participant_id = entry.value().clone();
+                                    drop(entry); // Release the reference
 
-                                debug!(
-                                    "DTMF digit '{}' from participant {} in room {}",
-                                    digit, participant_id, room_id
-                                );
+                                    debug!(
+                                        "DTMF digit '{}' from participant {} in room {}",
+                                        digit, participant_id, room_id
+                                    );
 
-                                // Process the digit
-                                room.process_dtmf_digit(&participant_id, digit).await;
+                                    // Process the digit
+                                    room.process_dtmf_digit(&participant_id, digit).await;
+                                }
                             }
                         }
-                    }
-                    Err(e) => {
-                        warn!("Error receiving event in room {}: {}", room_id, e);
-                        break;
+                        Err(e) => {
+                            warn!("Error receiving event in room {}: {}", room_id, e);
+                            break;
+                        }
                     }
                 }
-            }
 
-            debug!("DTMF processing task ended for room {}", room_id);
-        })
+                debug!("DTMF processing task ended for room {}", room_id);
+            },
+            self.log_span(),
+        ))
     }
 
     /// Process a DTMF digit from a participant
@@ -2489,6 +2517,55 @@ mod tests {
             .unwrap();
         assert_eq!(to_peer[0], (300f32 * g) as i16);
 
+        room.stop_frame_clock();
+    }
+
+    /// A host's span over the room's own tasks: what the clock logs
+    /// names what the host said the room belongs to.
+    #[tokio::test]
+    async fn the_room_s_tasks_log_under_the_span_the_host_set() {
+        use std::io::Write;
+        #[derive(Clone, Default)]
+        struct Lines(Arc<parking_lot::Mutex<Vec<u8>>>);
+        impl Write for Lines {
+            fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().extend_from_slice(b);
+                Ok(b.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let lines = Lines::default();
+        let writer = lines.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::DEBUG)
+            .with_ansi(false)
+            .with_writer(move || writer.clone())
+            .finish();
+        let _default = tracing::subscriber::set_default(subscriber);
+
+        let options = forge_mixer::MixerOptions {
+            frame_clock: true,
+            ..Default::default()
+        };
+        let room =
+            Arc::new(ConferenceRoom::new("lobby", AudioFormat::pcm_mono(), 160, options).unwrap());
+        room.set_log_span(tracing::info_span!("host_room", tenant_id = "tenant-acme"));
+        let mut clock = room.frame_clock();
+        room.start_frame_clock().unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(2), clock.changed())
+            .await
+            .expect("clock ticked")
+            .unwrap();
+        // The clock's own line, from inside its task, names the host's span.
+        let text = String::from_utf8_lossy(&lines.0.lock()).to_string();
+        let line = text
+            .lines()
+            .find(|l| l.contains("Frame clock for room lobby running"))
+            .unwrap_or_else(|| panic!("the clock said nothing from its task: {text}"));
+        assert!(line.contains("host_room"), "{line}");
+        assert!(line.contains("tenant_id=\"tenant-acme\""), "{line}");
         room.stop_frame_clock();
     }
 

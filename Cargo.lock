@@ -1635,7 +1635,7 @@ dependencies = [
 
 [[package]]
 name = "forge-conference"
-version = "0.23.0"
+version = "0.24.0"
 dependencies = [
  "bytes",
  "dashmap 6.2.1",
@@ -1657,6 +1657,7 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
